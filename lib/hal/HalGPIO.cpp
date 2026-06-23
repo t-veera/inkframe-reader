@@ -4,6 +4,9 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <esp_sleep.h>
+#ifdef INKFRAME_HW
+#include "driver/gpio.h"
+#endif
 
 // Global HalGPIO instance
 HalGPIO gpio;
@@ -192,18 +195,47 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 
 void HalGPIO::begin() {
   inputMgr.begin();
+#ifdef INKFRAME_HW
+  // Bring up the shared FSPI bus here — before Storage::begin() which runs
+  // in setup() ahead of EInkDisplay::begin(). SDCardManager needs inkframeFspi
+  // initialised or sd.begin() fails with an uninitialised SPIClass.
+  // EPD_PWR must also be HIGH this early; the panel ignores all SPI until it is.
+  extern SPIClass inkframeFspi;
+  gpio_reset_pin(GPIO_NUM_47);
+  gpio_reset_pin(GPIO_NUM_21);
+  gpio_reset_pin(GPIO_NUM_13);
+  pinMode(INKFRAME_EPD_PWR, OUTPUT); digitalWrite(INKFRAME_EPD_PWR, HIGH);
+  pinMode(INKFRAME_EPD_CS,  OUTPUT); digitalWrite(INKFRAME_EPD_CS,  HIGH);
+  pinMode(INKFRAME_SD_CS,   OUTPUT); digitalWrite(INKFRAME_SD_CS,   HIGH);
+  delay(100);
+  inkframeFspi.begin(INKFRAME_EPD_SCK, INKFRAME_SD_MISO, INKFRAME_EPD_MOSI, INKFRAME_SD_CS);
+  // spiAttachMISO calls pinMode(INPUT) which clears pull-ups — set AFTER begin().
+  // Without pull-up, floating MISO reads LOW → sdWait() sees 0x00 forever → sdSelectCard fails.
+  gpio_set_pull_mode(GPIO_NUM_21, GPIO_PULLUP_ONLY);
+#else
+  // CrossPoint's EInkDisplay uses the default SPI bus, so init it here.
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
+#endif
 
   _deviceType = detectDeviceTypeWithFingerprint();
 
+#ifndef INKFRAME_HW
   if (deviceIsX4()) {
-    pinMode(BAT_GPIO0, INPUT);
-    pinMode(UART0_RXD, INPUT);
+    pinMode(BAT_GPIO0, INPUT);   // battery ADC — wrong pin on InkFrame (GPIO0 = power btn)
+    pinMode(UART0_RXD, INPUT);   // USB-detect — GPIO20 is a native-USB data line on InkFrame
   }
+#endif
 }
 
 void HalGPIO::update() {
+#ifndef INKFRAME_HW
   inputMgr.update();
+#endif
+  // INKFRAME: the CrossPoint InputManager is an ADC-ladder reader and produces
+  // garbage button events on our digital 5-way switch pins. Those spurious
+  // events spam HomeActivity navigation -> requestUpdate(), so the e-ink panel
+  // never settles. Until the digital button driver is ported (Phase 2), skip
+  // InputManager entirely and report no button activity below.
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -211,6 +243,16 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
+#ifdef INKFRAME_HW
+// TEMP input stub (see update()): always report "nothing pressed" so no
+// spurious events reach the activities. Navigation/sleep via buttons is
+// disabled until the InkFrame digital 5-way switch driver lands.
+bool HalGPIO::isPressed(uint8_t) const { return false; }
+bool HalGPIO::wasPressed(uint8_t) const { return false; }
+bool HalGPIO::wasAnyPressed() const { return false; }
+bool HalGPIO::wasReleased(uint8_t) const { return false; }
+bool HalGPIO::wasAnyReleased() const { return false; }
+#else
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
@@ -220,6 +262,7 @@ bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
 
 bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+#endif
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
@@ -232,7 +275,11 @@ void HalGPIO::startDeepSleep() {
     inputMgr.update();
   }
   // Arm the wakeup trigger *after* the button is released
+#ifdef INKFRAME_HW
+  esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(INKFRAME_BTN_POWER), 0);
+#else
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+#endif
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -282,11 +329,28 @@ bool HalGPIO::isUsbConnected() const {
     }
     return false;
   }
+#ifdef INKFRAME_HW
+  // GPIO20 is a native-USB data line on the ESP32-S3 (USB CDC on boot), not a
+  // USB-detect pin — reading it returns USB traffic noise, which flips
+  // usbStateChanged every loop and spams requestUpdate() (panel never settles).
+  // No VBUS-sense pin is wired yet, so report a stable value until one is.
+  return false;
+#else
   // U0RXD/GPIO20 reads HIGH when USB is connected
   return digitalRead(UART0_RXD) == HIGH;
+#endif
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
+#ifdef INKFRAME_HW
+  // isUsbConnected() always returns false on InkFrame (no VBUS pin wired yet),
+  // so the X3/X4 heuristics below misidentify every cold boot as a power-button
+  // wake, then block in verifyPowerButtonWakeup() and sleep. Until deep sleep /
+  // wake is fully ported for InkFrame, skip the heuristics: USB-flash resets
+  // are ESP_RST_UNKNOWN → AfterFlash; everything else → Other (boot normally).
+  if (esp_reset_reason() == ESP_RST_UNKNOWN) return WakeupReason::AfterFlash;
+  return WakeupReason::Other;
+#endif
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 

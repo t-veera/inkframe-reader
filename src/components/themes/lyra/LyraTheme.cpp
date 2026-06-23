@@ -319,6 +319,11 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+#ifdef INKFRAME_HW
+  // InkFrame has no Xteink-style hardware buttons; mapping the 5-way switch to
+  // button actions is Phase 2 input work. Hide the bottom hint bar until then.
+  return;
+#endif
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

@@ -2,16 +2,17 @@
 
 #include <Arduino.h>
 #include <InputManager.h>
-
-// Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
-#define EPD_SCLK 8   // SPI Clock
-#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
-#define EPD_CS 21    // Chip Select
-#define EPD_DC 4     // Data/Command
-#define EPD_RST 5    // Reset
-#define EPD_BUSY 6   // Busy
-
-#define SPI_MISO 7  // SPI MISO, shared between SD card and display (Master In Slave Out)
+#ifdef INKFRAME_HW
+#include <inkframe_pins.h>
+// Map CrossPoint's EPD/SPI names to INKFRAME V2 pin numbers (single source: inkframe_pins.h)
+#define EPD_SCLK  INKFRAME_EPD_SCK
+#define EPD_MOSI  INKFRAME_EPD_MOSI
+#define EPD_CS    INKFRAME_EPD_CS
+#define EPD_DC    INKFRAME_EPD_DC
+#define EPD_RST   INKFRAME_EPD_RST
+#define EPD_BUSY  INKFRAME_EPD_BUSY
+#define SPI_MISO  INKFRAME_SD_MISO
+#endif
 
 #define BAT_GPIO0 0  // Battery voltage
 

@@ -43,7 +43,11 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   }
 
   // Copied from components/esp_system/port/arch/riscv/panic_arch.c
-  uint32_t sp = (uint32_t)((RvExcFrame*)frame)->sp;
+#ifdef INKFRAME_HW
+  uint32_t sp = (uint32_t)((XtExcFrame*)frame)->a1;  // Xtensa (S3): SP is in a1
+#else
+  uint32_t sp = (uint32_t)((RvExcFrame*)frame)->sp;  // RISC-V (C3)
+#endif
   const int per_line = 8;
   int depth = 0;
   for (int x = 0; x < 1024; x += per_line * sizeof(uint32_t)) {
