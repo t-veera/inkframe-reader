@@ -1,272 +1,187 @@
-# CrossPoint Reader
+# INKFRAME Reader
 
-[![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
+INKFRAME is an open-source, DRM-free, repairable DIY e-reader built on the
+[CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) firmware,
+ported to custom INKFRAME hardware. It is designed to be fully hackable,
+component-swappable, and free from vendor lock-in — forever.
 
-CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
-
-**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
-
-![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
-
-## What can CrossPoint do?
-
-- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
-
-- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
-
-- **Screenshots.**
-
-- **Custom fonts**: install your favorite fonts on the SD card.
-
-- **Tilt page turn (X3 only)**.
-
-- **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, SD-cache management.
-
-- **Wireless workflows**:
-  
-  - File transfer web UI
-  - EPUB Optimizer
-  - Web settings UI/API (edit many device settings from browser)
-  - WebSocket fast uploads
-  - WebDAV handler
-  - AP mode (hotspot) and STA mode (join existing Wi-Fi), both with QR helpers
-  - Calibre wireless connect flow
-  - OPDS browser with saved servers (up to 8), search, pagination, and direct download
-  - OTA update checks and installs from GitHub releases
-
-- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
-
-- **Localization**: 24 UI languages and counting. RTL support.
-
-### Coming soon:
-
-- Dictionary lookup — inline word lookup without leaving the reader.
-
-- More themes.
-
-- Much more! stay tuned.
+> **This is a fork of CrossPoint.** The full reader engine, UI, EPUB parsing,
+> WiFi upload server, and settings are CrossPoint's work. INKFRAME replaces
+> only the hardware layer (display driver, SD card, input) to run on custom
+> hardware. See [SYNCING_WITH_CROSSPOINT.md](./SYNCING_WITH_CROSSPOINT.md) for
+> how to pull upstream CrossPoint updates.
 
 ---
 
-## USB-locked devices (Xteink Unlocker)
+## Hardware
 
-Some Xteink units purchased from third-party stores (e.g. AliExpress) ship with USB flashing locked from the factory.
-If your device is locked, you will need to use the **Xteink Unlocker** tool available at
-https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
+| Component | Part |
+|---|---|
+| MCU | ESP32-S3-N16R8 (16MB Flash, 8MB OPI PSRAM) |
+| Display | Waveshare GDEQ0583T31 — 5.83", 648×480px, 135 DPI, UC8179 controller |
+| Display driver | Waveshare e-Paper Driver HAT (breadboard / V1) |
+| Storage | MicroSD card, FAT32 |
+| Navigation | Sunrom 4379 5-way tactile switch |
+| Charging | TP4056 + MT3608 boost |
 
-**You do not need this tool if you bought your device directly from xteink.com.** Those units are not locked.
+### Pin map (V2 schematic — authoritative)
 
-**Not sure if your device is locked?** Power it on, connect the USB-C cable, and try flashing via the web flasher first (see
-[Install firmware](#install-firmware) below). If the browser's serial device picker does not show your device, try a different
-USB port or browser before assuming the device is locked. Only reach for the unlocker if the device still doesn't appear.
+| Signal | GPIO |
+|---|---|
+| EPD_PWR_EN | 6 |
+| EPD_BUSY | 7 |
+| EPD_RST | 8 |
+| EPD_DC | 9 |
+| EPD_CS | 10 |
+| EPD_DIN / SD_MOSI | 13 (shared bus) |
+| EPD_SCK / SD_SCK | 47 (shared bus) |
+| SD_MISO | 21 |
+| SD_CS | 48 |
+| NAV UP | 1 |
+| NAV DOWN | 2 |
+| NAV LEFT | 4 |
+| NAV RIGHT | 5 |
+| NAV CENTER | 17 |
+| POWER button | 0 |
+| BAT_ADC | 15 |
+| CHRG (TP4056) | 38 |
+| STDBY (TP4056) | 39 |
+| BOOST_EN (MT3608) | 45 |
 
-> ### ⚠️ WARNING: READ THIS BEFORE USING THE UNLOCKER ⚠️
-> 
-> **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
-> 
-> Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
-> stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
-> the firmware you flashed doesn't support OTA, **there is no way out**.
-> 
-> **The Papyrix fork has removed OTA update support from its code.** If you flash Papyrix onto a
-> USB-locked unit, you will have **zero update or recovery path** and will be stuck on it forever. **Do not flash
-> Papyrix (or any other unsupported firmware) on a locked device.**
+---
 
-## Install firmware
+## What it does (inherited from CrossPoint)
 
-### Web installer (recommended)
+- **Reader engine** — EPUB 2/3 rendering, image handling, hyphenation,
+  chapter navigation, footnotes, bookmarks, go-to-percent, auto page turn,
+  KOReader progress sync
+- **Formats** — `.epub`, `.txt`, `.bmp`
+- **Custom fonts** — drop `.ttf` files into `/fonts/` on the SD card
+- **Library workflow** — folder browser, recent books, SD cache management
+- **Wireless workflows** — file transfer web UI, WebSocket fast uploads,
+  WebDAV, WiFi AP/STA mode, Calibre wireless connect, OPDS browser, OTA
+- **Themes** — Classic, Lyra, Lyra Extended, RoundedRaff
+- **Localization** — 24 UI languages, RTL support
 
-1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), and choose an official CrossPoint release.
+---
 
-### Web installer (specific version)
+## SD card folder structure
 
-1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Download a `firmware.bin` from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), local build, or continuous integration artifact.
-3. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), click "Custom .bin" and upload a `firmware.bin`.
-
-### Revert to Official Firmware
-
-To revert to the official firmware, you can also flash the latest official firmware using https://crosspointreader.com/#flash-tools.
-
-### Command line
-
-1. Install [`esptool`](https://github.com/espressif/esptool):
-
-```bash
-pip install esptool
+```
+/
+├── books/          ← put EPUB files here
+├── fonts/          ← custom .ttf font families
+└── .crosspoint/    ← settings and reading position (auto-created)
 ```
 
-2. Download `firmware.bin` from the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases).
-3. Connect your device via USB-C.
-4. Find the device port. On Linux, run `dmesg` after connecting. On macOS:
+### Recommended fonts for 135 DPI e-ink
 
-```bash
-log stream --predicate 'subsystem == "com.apple.iokit"' --info
-```
+| Font | Source | Why |
+|---|---|---|
+| **Gelasio** | Google Fonts | Georgia clone, designed for low-DPI screens — best pick |
+| **Bitstream Charter** | nicoverbruggen/ebook-fonts | Designed for 300 DPI laser/fax — holds up perfectly at 135 DPI |
+| **Atkinson Hyperlegible** | Google Fonts | Engineered for degraded rendering conditions |
 
-5. Flash:
-
-```bash
-esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 /path/to/firmware.bin
-```
-
-Adjust `/dev/ttyACM0` to match your system.
-
-### Manual
-
-See [Development quick start](#development-quick-start) below.
+Avoid Garamond, Baskerville, and Bookerly — their hairline strokes break up
+at 135 DPI.
 
 ---
 
-## Custom SD-card fonts
+## Building and flashing
 
-Convert your own TTF/OTF files into `.cpfont` files that load from the SD card. No firmware reflash is needed.
+### Requirements
+- PlatformIO (VS Code extension or CLI)
+- ESP32-S3-N16R8 dev board connected via USB (not UART) port
 
-1. Go to https://crosspointreader.com/fonts and open the "SD-card font builder" form.
-2. Upload up to four styles (regular, bold, italic, bold-italic), set the family name, point sizes, and Unicode range.
-3. Download the generated `.cpfont` files.
-4. Copy them to your SD card under `/fonts/YourFont/` (or `/.fonts/YourFont/` to hide the folder).
-5. Select the font on the device from the font settings.
-
-Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` script unmodified, so output matches a local host build.
-
----
-
-## Documentation
-
-- [User Guide](./USER_GUIDE.md)
-- [Web server usage](./docs/webserver.md)
-- [Web server endpoints](./docs/webserver-endpoints.md)
-- [Project scope](./SCOPE.md)
-- [Contributing docs](./docs/contributing/README.md)
-
----
-
-## Development quick start
-
-### Prerequisites
-
-- [pioarduino](https://github.com/pioarduino/pioarduino) or VS Code + pioarduino plugin
-- Python 3.8+
-- `clang-format` 21
-- USB-C cable supporting data transfer
-
-### Setup
-
+### Clone
 ```bash
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-cd crosspoint-reader
-
-# if cloned without --recursive:
+git clone https://github.com/t-veera/inkframe-reader.git
+cd inkframe-reader
+git checkout inkframe-s3-uc8179
 git submodule update --init --recursive
 ```
 
-### Build / flash / monitor
+### Build
+```bash
+pio run
+```
+
+### Flash
+```bash
+pio run -t upload
+```
+
+### Monitor
+```bash
+pio device monitor
+```
+
+> **N16R8 is required.** `platformio.ini` sets
+> `board_build.arduino.memory_type = qio_opi` for the Octal PSRAM. Compiling
+> without this flag (for N8R8) will cause silent failures.
+
+---
+
+## Architecture
+
+INKFRAME follows a clean five-layer stack. Only layer 3 (the HAL) differs from
+upstream CrossPoint. See [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md).
+
+```
+5 · UI                   CrossPoint — untouched
+4 · Application/logic    CrossPoint — untouched
+3 · Driver / HAL         INKFRAME — GxEPD2 shim, shared SPI, 5-way switch
+2 · Framework / RTOS     Arduino-ESP32 + FreeRTOS — given by Espressif
+1 · Hardware             Your board and wiring
+```
+
+**INKFRAME-specific files (layer 3 only):**
+- `open-x4-sdk/libs/display/EInkDisplay/src/EInkDisplay_inkframe.cpp` — GxEPD2 shim
+- `open-x4-sdk/libs/hardware/SDCardManager/src/SDCardManager.cpp` — shared SPI SD
+- `lib/hal/inkframe_pins.h` — single source of truth for all pin numbers
+- `platformio.ini` — S3 board, OPI PSRAM, GxEPD2 dependency
+
+All changes are guarded by `#ifdef INKFRAME_HW` so CrossPoint's originals are
+preserved and upstream syncs remain clean.
+
+---
+
+## Syncing with upstream CrossPoint
+
+See [SYNCING_WITH_CROSSPOINT.md](./SYNCING_WITH_CROSSPOINT.md) for the full
+workflow. Short version:
 
 ```bash
-pio run --target upload
+git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git
+git fetch upstream
+git rebase upstream/master
 ```
-
-### Contributor pre-PR checks
-
-```bash
-./bin/clang-format-fix
-pio check -e default
-pio run -e default
-```
-
-### Debugging
-
-After flashing the new features, it’s recommended to capture detailed logs from the serial port.
-
-First, make sure all required Python packages are installed:
-
-```python
-python3 -m pip install pyserial colorama matplotlib
-```
-
-After that run the script:
-
-```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
-python3 scripts/debugging_monitor.py
-
-# For macOS
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
-```
-
-Minor adjustments may be required for Windows.
 
 ---
 
-## Internals
+## Roadmap
 
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
-
-### Data caching
-
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the
-cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
-
-```text
-.crosspoint/
-├── epub_<hash>/         # one directory per book, named by content hash
-│   ├── progress.bin     # reading position (chapter, page, etc.)
-│   ├── cover.bmp        # generated cover image
-│   ├── book.bin         # metadata: title, author, spine, TOC
-│   ├── css_rules.cache  # parsed CSS rule cache
-│   ├── img_*            # rendered image cache files
-│   └── sections/        # per-chapter layout cache
-│       ├── 0.bin
-│       ├── 1.bin
-│       └── ...
-├── settings.json        # device settings
-├── state.json           # resume/runtime state
-└── recent.json          # recent books list
-```
-
-Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
-
-For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
+| Phase | Status | What |
+|---|---|---|
+| Phase 1 | ✅ Done | Boot + display rendering CrossPoint UI on INKFRAME hardware |
+| Phase 2 | 🔜 Next | 5-way switch input, battery ADC (GPIO15), power management |
+| Phase 3 | Planned | Home-library dashboard (UDP discovery + POST /upload) |
+| Phase 4 | Planned | Deep sleep/wake, NVS position caching, polish |
+| V3 | Future | Custom PCB, GDEY display, OTA, ≤9mm thickness |
 
 ---
 
-## Contributing
+## Licence
 
-Contributions are welcome. If you're new to the codebase, start with the [contributing docs](./docs/contributing/README.md). For things to work on, check the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
-
-Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see [GOVERNANCE.md](./GOVERNANCE.md).
-
----
-
-## Community forks
-
-One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's [scope](./SCOPE.md), check out the community forks:
-
-- [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
-
-- [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
-
-- [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
-
-- [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
-
-- [inx](https://github.com/obijuankenobiii/inx) — Completely reimagines the user interface with tabbed navigation.
-
-- ~~[PlusPoint](https://github.com/ngxson/pluspoint-reader) — custom JS apps support.~~ (Unmaintained)
-
-- [crosspoint-reader-papers3](https://github.com/juicecultus/crosspoint-reader-papers3) — Crosspoint port for M5Stack Paper S3. 
-
-- [t5s3-reader](https://github.com/ShallowGreen123/t5s3-reader) — Crosspoint port for LilyGo T5 ePaper S3 / T5S3 4.7-inch e-paper device.
-
-**Note:** Many of these features will make their way into CrossPoint over time. We maintain a slower pace to ensure rock-solid stability and squash bugs before they reach your device.
-
-Want to build your own device? Be sure to check out the [de-link](https://github.com/iandchasse/de-link) project.
+INKFRAME firmware inherits CrossPoint's licence. See
+[LICENSE](./LICENSE) for details. Hardware design files are released under
+CERN-OHL-S.
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any device manufacturer**.
+## Credits
 
-Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired this project.
+Built on [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader)
+by the CrossPoint community. Display driver via
+[GxEPD2](https://github.com/ZinggJM/GxEPD2) by Jean-Marc Zingg. EPUB engine
+originally from [atomic14](https://github.com/atomic14/esp32-ereader).
